@@ -1,0 +1,19 @@
+{
+  "name": "Staff Scheduler",
+  "short_name": "Scheduler",
+  "description": "The simplest, most beautiful staff scheduler",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#3b82f6",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
+
