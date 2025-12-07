@@ -3,7 +3,10 @@
 import React, { useState } from 'react';
 import { useStore } from '@/lib/store';
 import { generateScheduleVariants } from '@/lib/scheduler';
+import { generateWithSolverService } from '@/lib/solverClient';
 import { Button } from './ui/Button';
+
+type SolverSource = 'python' | 'local' | null;
 
 export function GenerateButton() {
   const {
@@ -21,6 +24,8 @@ export function GenerateButton() {
   } = useStore();
 
   const [showSuccess, setShowSuccess] = useState(false);
+  const [solverUsed, setSolverUsed] = useState<SolverSource>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const canGenerate = staff.length > 0 && requirements.length > 0;
 
@@ -29,39 +34,71 @@ export function GenerateButton() {
 
     setIsGenerating(true);
     setShowSuccess(false);
-
-    // Simulate a brief delay for visual feedback
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    setError(null);
+    setSolverUsed(null);
 
     try {
-      const { variants } = generateScheduleVariants(
-        {
-          staff,
-          availability,
-          requirements,
-          locations,
-          qualifications,
-          weekStartDate: selectedWeekStart,
-          constraints: {
-            balanceHours: schedulerSettings.balanceHoursByDefault,
-            respectPreferences: true,
-            lockedShiftIds: [],
-            allowSplitShifts: schedulerSettings.allowSplitShifts,
-            minOverlapHours: schedulerSettings.minOverlapHours,
-          },
+      const basePayload = {
+        staff,
+        availability,
+        requirements,
+        locations,
+        qualifications,
+        weekStartDate: selectedWeekStart,
+        constraints: {
+          balanceHours: schedulerSettings.balanceHoursByDefault,
+          respectPreferences: true,
+          lockedShiftIds: [],
+          allowSplitShifts: schedulerSettings.allowSplitShifts,
+          minOverlapHours: schedulerSettings.minOverlapHours,
+          solveSeconds: 10,
+          solutionPoolSize: 3,
         },
-        30,
-        3
-      );
+      };
 
-      if (variants.length > 0) {
+      let variants = null;
+      let usedPython = false;
+
+      // Try Python solver first (optimal solution)
+      try {
+        variants = await generateWithSolverService(basePayload);
+        if (variants && variants.length > 0) {
+          usedPython = true;
+          setSolverUsed('python');
+        }
+      } catch (pythonError) {
+        console.warn('Python solver unavailable:', pythonError);
+        // Will fall back to local solver
+      }
+
+      // Fall back to local TypeScript solver
+      if (!variants || variants.length === 0) {
+        console.log('Using local TypeScript scheduler');
+        const local = generateScheduleVariants(basePayload, 30, 3);
+        variants = local.variants;
+        setSolverUsed('local');
+      }
+
+      if (variants && variants.length > 0) {
+        // Verify no max hours violations before showing results
+        const hasOvertime = variants.some(v => 
+          v.warnings.some(w => w.type === 'overtime')
+        );
+        
+        if (hasOvertime) {
+          console.error('Schedule has overtime violations - this should not happen');
+        }
+
         setScheduleVariants(variants.map((v) => v.schedule), 0);
         setCurrentSchedule(variants[0].schedule);
         setShowSuccess(true);
         setTimeout(() => setShowSuccess(false), 3000);
+      } else {
+        setError('Could not generate a valid schedule');
       }
-    } catch (error) {
-      console.error('Failed to generate schedule:', error);
+    } catch (err) {
+      console.error('Failed to generate schedule:', err);
+      setError('Failed to generate schedule');
     } finally {
       setIsGenerating(false);
     }
@@ -98,6 +135,22 @@ export function GenerateButton() {
         </div>
       )}
 
+      {/* Solver indicator */}
+      {solverUsed && !isGenerating && (
+        <p className="text-xs text-white/50 mt-2 text-center">
+          {solverUsed === 'python' ? (
+            <span className="text-emerald-400">✓ Optimal solver</span>
+          ) : (
+            <span className="text-amber-400">⚡ Local solver</span>
+          )}
+        </p>
+      )}
+
+      {/* Error message */}
+      {error && (
+        <p className="text-xs text-red-400 mt-2 text-center">{error}</p>
+      )}
+
       {!canGenerate && (
         <p className="text-xs text-white/40 mt-2 text-center">
           Add staff and requirements first
@@ -106,4 +159,3 @@ export function GenerateButton() {
     </div>
   );
 }
-

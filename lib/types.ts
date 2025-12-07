@@ -82,6 +82,8 @@ export interface ScheduleConstraints {
   lockedShiftIds: string[]; // Don't change these assignments
   allowSplitShifts: boolean; // Allow staff to be assigned even if they don't cover the full shift
   minOverlapHours?: number; // Minimum hours of overlap required for split shifts (default: 2)
+  solveSeconds?: number; // Time limit for solver (default: 10)
+  solutionPoolSize?: number; // Number of alternative solutions to generate
 }
 
 // Global scheduler settings
